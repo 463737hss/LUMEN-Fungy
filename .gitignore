@@ -1,0 +1,8 @@
+# Estado vivo da LUMEN (gerado em runtime — não versionar)
+lumen_mente.json
+lumen_mente.json.tmp
+lumen_criacoes/
+lumen_mundo/
+lumen_inbox/
+__pycache__/
+*.pyc
