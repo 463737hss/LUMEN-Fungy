@@ -1,0 +1,598 @@
+<meta charset="utf-8">
+<title>LUMEN · Microscópio da Mente</title>
+<style>
+  :root{
+    --void:#05070f; --abyss:#0a0d1a; --panel:#0d1120; --edge:#1b2236;
+    --mycelium:#46d6e6; --spore:#74f2a4; --idea:#ffd47a;
+    --violet:#b98cff; --coral:#ff8f7c; --plan:#f2e58a;
+    --lume:#e9edfb; --haze:#838da8; --dim:#565f7c;
+    --mono:ui-monospace,"JetBrains Mono","SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:
+      radial-gradient(120% 90% at 50% -10%, #0c1230 0%, var(--void) 60%),
+      var(--void);
+    color:var(--lume); font-family:var(--mono);
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+  .shell{display:grid; grid-template-rows:auto auto minmax(0,1fr) auto; height:100vh; height:100dvh}
+
+  /* ─── header ─── */
+  header{
+    display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;
+    padding:12px 18px 6px; border-bottom:1px solid var(--edge);
+  }
+  .mark{font-size:20px; letter-spacing:.32em; font-weight:700;
+    background:linear-gradient(92deg,var(--mycelium),var(--spore) 55%,var(--idea));
+    -webkit-background-clip:text; background-clip:text; color:transparent;}
+  .sub{font-size:11px; letter-spacing:.26em; text-transform:uppercase; color:var(--haze)}
+  .live{margin-left:auto; display:flex; align-items:center; gap:8px; font-size:11px;
+    letter-spacing:.16em; text-transform:uppercase; color:var(--haze)}
+  .pulse{width:8px;height:8px;border-radius:50%;background:var(--spore);
+    box-shadow:0 0 10px var(--spore); animation:beat 1.8s ease-in-out infinite}
+  @keyframes beat{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1.25)}}
+
+  /* ─── mode tabs ─── */
+  nav{display:flex; gap:6px; padding:8px 14px; overflow-x:auto; border-bottom:1px solid var(--edge)}
+  nav button{
+    font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--haze); background:transparent; border:1px solid var(--edge);
+    border-radius:7px; padding:7px 11px; cursor:pointer; white-space:nowrap;
+    display:flex; gap:8px; align-items:center; transition:.18s}
+  nav button .n{color:var(--dim); font-variant-numeric:tabular-nums}
+  nav button:hover{color:var(--lume); border-color:#2b3552}
+  nav button[aria-pressed="true"]{color:var(--void); background:var(--myc,#46d6e6);
+    border-color:transparent; box-shadow:0 0 18px -4px var(--myc,#46d6e6)}
+  nav button[aria-pressed="true"] .n{color:var(--void); opacity:.6}
+
+  /* ─── stage ─── */
+  .stage{display:grid; grid-template-columns:minmax(0,1fr) 288px; min-height:0}
+  .view{position:relative; min-height:0; overflow:hidden}
+  canvas{display:block; width:100%; height:100%}
+  .reticle{position:absolute; inset:0; pointer-events:none;
+    background:radial-gradient(circle at 50% 48%, transparent 52%, rgba(3,5,12,.72) 88%);}
+  .modelabel{position:absolute; left:16px; top:14px; font-size:11px; letter-spacing:.24em;
+    text-transform:uppercase; color:var(--haze); pointer-events:none}
+  .modelabel b{color:var(--lume); font-weight:600}
+  .hint{position:absolute; right:14px; bottom:12px; font-size:10.5px; letter-spacing:.1em;
+    color:var(--dim); pointer-events:none; text-align:right; line-height:1.7}
+
+  /* ─── instrument panel ─── */
+  aside{border-left:1px solid var(--edge); background:linear-gradient(180deg,var(--abyss),var(--void));
+    padding:14px; overflow-y:auto; display:flex; flex-direction:column; gap:14px}
+  .card{border:1px solid var(--edge); border-radius:10px; padding:12px; background:rgba(13,17,32,.6)}
+  .card h3{margin:0 0 10px; font-size:10px; letter-spacing:.24em; text-transform:uppercase; color:var(--haze); font-weight:600}
+  .metric{margin-bottom:9px}
+  .metric:last-child{margin-bottom:0}
+  .metric .top{display:flex; justify-content:space-between; font-size:11px; letter-spacing:.06em}
+  .metric .lab{color:var(--haze); text-transform:uppercase; letter-spacing:.14em; font-size:10px}
+  .metric .val{color:var(--lume); font-variant-numeric:tabular-nums}
+  .bar{height:4px; margin-top:4px; border-radius:3px; background:#141a2c; overflow:hidden}
+  .bar i{display:block; height:100%; border-radius:3px; transition:width .35s ease}
+  .stats{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+  .stat{border:1px solid var(--edge); border-radius:8px; padding:8px 9px}
+  .stat .k{font-size:9.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--haze)}
+  .stat .v{font-size:19px; font-variant-numeric:tabular-nums; color:var(--lume); margin-top:2px}
+  .stat .v small{font-size:11px; color:var(--dim)}
+
+  .feed{display:flex; flex-direction:column; gap:8px}
+  .feed textarea{resize:none; height:58px; font-family:var(--sans); font-size:12.5px; line-height:1.45;
+    color:var(--lume); background:#0b0f1d; border:1px solid var(--edge); border-radius:8px; padding:8px}
+  .feed textarea:focus{outline:none; border-color:var(--spore); box-shadow:0 0 0 3px rgba(116,242,164,.12)}
+  .row{display:flex; gap:8px}
+  .btn{flex:1; font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--lume); background:#121728; border:1px solid var(--edge); border-radius:8px;
+    padding:9px; cursor:pointer; transition:.16s}
+  .btn:hover{border-color:#334; background:#161d33}
+  .btn.go{color:var(--void); background:var(--spore); border-color:transparent; font-weight:600}
+  .btn.go:hover{filter:brightness(1.08)}
+  .btn:focus-visible,nav button:focus-visible,textarea:focus-visible{outline:2px solid var(--mycelium); outline-offset:2px}
+
+  /* ─── ticker ─── */
+  footer{border-top:1px solid var(--edge); background:var(--abyss); height:74px; overflow:hidden;
+    padding:8px 16px; display:flex; flex-direction:column; gap:3px}
+  .ev{display:flex; align-items:center; gap:9px; font-size:11.5px; letter-spacing:.02em; opacity:.9}
+  .ev .dot{width:7px;height:7px;border-radius:50%; flex:none; box-shadow:0 0 8px currentColor}
+  .ev .txt{color:var(--lume); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .ev .t{margin-left:auto; color:var(--dim); font-variant-numeric:tabular-nums; flex:none}
+  .ev.fade{opacity:.4}
+  .ev.fade2{opacity:.2}
+
+  @media (max-width:860px){
+    .stage{grid-template-columns:1fr; grid-template-rows:minmax(0,1fr) auto}
+    aside{border-left:none; border-top:1px solid var(--edge); flex-direction:row; overflow-x:auto; max-height:42vh}
+    aside .card{min-width:210px}
+    .hint{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){ .pulse{animation:none} }
+</style>
+
+<div class="shell">
+  <header>
+    <span class="mark">LUMEN</span>
+    <span class="sub">microscópio da mente · organismo-colmeia</span>
+    <span class="live"><span class="pulse" id="pulse"></span><span id="livetxt">viva</span></span>
+  </header>
+
+  <nav id="tabs"></nav>
+
+  <div class="stage">
+    <div class="view">
+      <canvas id="c"></canvas>
+      <div class="reticle"></div>
+      <div class="modelabel" id="modelabel"></div>
+      <div class="hint">1–6 modos · +/− zoom · espaço pausa<br>alimente-a com texto ao lado →</div>
+    </div>
+
+    <aside>
+      <div class="card">
+        <h3>Vitalidade da colônia</h3>
+        <div class="metric"><div class="top"><span class="lab">Fitness</span><span class="val" id="m_fit">0.00</span></div><div class="bar"><i id="b_fit" style="background:linear-gradient(90deg,#46d6e6,#74f2a4)"></i></div></div>
+        <div class="metric"><div class="top"><span class="lab">Coerência</span><span class="val" id="m_coe">0.00</span></div><div class="bar"><i id="b_coe" style="background:var(--mycelium)"></i></div></div>
+        <div class="metric"><div class="top"><span class="lab">Utilidade</span><span class="val" id="m_uti">0.00</span></div><div class="bar"><i id="b_uti" style="background:var(--spore)"></i></div></div>
+        <div class="metric"><div class="top"><span class="lab">Complexidade</span><span class="val" id="m_cpx">0.00</span></div><div class="bar"><i id="b_cpx" style="background:var(--violet)"></i></div></div>
+        <div class="metric"><div class="top"><span class="lab">Diversidade</span><span class="val" id="m_div">0.00</span></div><div class="bar"><i id="b_div" style="background:var(--coral)"></i></div></div>
+        <div class="metric"><div class="top"><span class="lab">Curiosidade</span><span class="val" id="m_cur">0.00</span></div><div class="bar"><i id="b_cur" style="background:var(--idea)"></i></div></div>
+      </div>
+
+      <div class="card">
+        <h3>Censo</h3>
+        <div class="stats">
+          <div class="stat"><div class="k">Conceitos</div><div class="v" id="s_nos">0</div></div>
+          <div class="stat"><div class="k">Hifas</div><div class="v" id="s_are">0</div></div>
+          <div class="stat"><div class="k">Subagentes</div><div class="v" id="s_hif">0</div></div>
+          <div class="stat"><div class="k">Ideias fundidas</div><div class="v" id="s_fus">0</div></div>
+          <div class="stat"><div class="k">Digeridos</div><div class="v" id="s_dig">0</div></div>
+          <div class="stat"><div class="k">Esquecidos</div><div class="v" id="s_esq">0</div></div>
+        </div>
+      </div>
+
+      <div class="card feed">
+        <h3>Alimentar conhecimento</h3>
+        <textarea id="feedbox" placeholder="Cole um texto de qualidade — a colônia vai digerir, curar e absorver o que for útil…"></textarea>
+        <div class="row">
+          <button class="btn go" id="feedbtn">Alimentar</button>
+          <button class="btn" id="pausebtn">Pausar</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="zoomout">Zoom −</button>
+          <button class="btn" id="zoomin">Zoom +</button>
+          <button class="btn" id="reseed">Recomeçar</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <footer id="ticker"></footer>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+  const rnd=(a=1)=>Math.random()*a;
+  const pick=a=>a[(Math.random()*a.length)|0];
+  const norm=s=>s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g," ").trim();
+
+  // ── paleta viva ──
+  const COL={void:[5,7,15],mycelium:[70,214,230],spore:[116,242,164],idea:[255,212,122],
+    violet:[185,140,255],coral:[255,143,124],plan:[242,229,138],haze:[131,141,168]};
+  const rgb=c=>`rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
+  const rgba=(c,a)=>`rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
+  const mix=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
+  function hsv(h,s,v){h=(h%1+1)%1;const i=(h*6)|0,f=h*6-i,p=v*(1-s),q=v*(1-f*s),t=v*(1-(1-f)*s);
+    const m=[[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][i%6];return[m[0]*255,m[1]*255,m[2]*255];}
+  const hashf=s=>{let h=0;for(const ch of s)h=(h*131+ch.charCodeAt(0))>>>0;return (h&0xffff)/0xffff;};
+
+  // ── léxico (fungos + DNA + cognição) para semear e forragear ──
+  const LEXICO="micelio hifa esporo physarum rizomorfo simbiose enzima lignina celulose nutriente fosforo carbono nitrogenio raiz solo rede fluxo energia sinal pulso genoma cromatina splicing transposon epigenetica metilacao histona cromossomo nucleo celula mitocondria fungo colonia armillaria schizophyllum ophiocordyceps rhizophagus micorriza plasmodio veia otimizacao labirinto conhecimento padrao ordem caos novidade hipotese coerencia curiosidade memoria consolidacao poda fusao ideia abstracao camada cluster ponte descoberta metabolismo herança mutacao selecao especializacao".split(" ");
+  const STOP=new Set("a o e as os de da do que em um uma para por com sem the of to in and or".split(" "));
+  const PAPEIS=[["forrageadora",COL.mycelium],["digestora",COL.spore],["consolidadora",COL.idea],
+    ["exploradora",COL.violet],["planejadora",COL.plan],["avaliadora",COL.coral]];
+  const MODOS=[["micelio","Micélio"],["fluxo","Fluxo de conhecimento"],["mapa","Mapa cognitivo"],
+    ["genoma","Genoma comportamental"],["ecossistema","Ecossistema de agentes"],["timeline","Linha temporal"]];
+  const MAXN=92, MAXPART=260;
+
+  // ══════════════════ ESTADO DO ORGANISMO ══════════════════
+  let nos, byLabel, adj, hyphae, particles, hist, ev, metrics, tick, seq;
+  let curiosidade, surpresa, fitness, melhor, estagnado, fundidos, esquecidos, digeridos, reorgs;
+
+  function reset(){
+    nos=[]; byLabel=new Map(); adj=new Map(); hyphae=[]; particles=[]; hist=[]; ev=[];
+    metrics={coerencia:0,utilidade:0,complexidade:0,diversidade:0}; tick=0; seq=0;
+    curiosidade=.35; surpresa=0; fitness=0; melhor=0; estagnado=0;
+    fundidos=0; esquecidos=0; digeridos=0; reorgs=0;
+    const seed=[];
+    for(const w of shuffle(LEXICO.slice()).slice(0,18)){const c=brotar(w,.72,.6,"semente"); if(c)seed.push(c);}
+    for(let i=0;i<26;i++){const a=pick(seed),b=pick(seed); if(a&&b&&a!==b)conectar(a,b,.16);}
+    for(let i=0;i<10;i++)nascerHifa();
+    emit("genese","uma mente acende num espaço sem bordas — começa a povoá-lo",COL.spore);
+  }
+  const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];}return a;};
+
+  // ── micélio: crescer / conectar / fluir / fundir / esquecer ──
+  function brotar(label,conf,novid,origem,order=0){
+    const key=norm(label); if(!key||key.length<2)return null;
+    if(byLabel.has(key)){const c=nos[byLabel.get(key)]; c.ativ=clamp(c.ativ+.25,0,1); c.lastUse=tick; return c;}
+    if(nos.length>=MAXN){podar(true); if(nos.length>=MAXN)return null;}
+    const ang=seq*2.399, r=34+rnd(46);
+    const c={id:seq++,label:key,conf:clamp(conf,0,1),util:.5,novid:clamp(novid,0,1),
+      ativ:.65,order,origem,uses:0,idade:0,lastUse:tick,
+      x:Math.cos(ang)*r,y:Math.sin(ang)*r,vx:0,vy:0,
+      hue:order>0?0.13:hashf(key)};
+    nos.push(c); byLabel.set(key,c.id); adj.set(c.id,new Map());
+    return c;
+  }
+  const ekey=(a,b)=>a<b?a+"_"+b:b+"_"+a;
+  function conectar(a,b,f){
+    if(!a||!b||a===b)return;
+    const m=adj.get(a.id); const e=m.get(b.id);
+    if(!e){const w=clamp(f,0,1); m.set(b.id,w); adj.get(b.id).set(a.id,w);}
+    else{const w=clamp(e+f*(1-e),0,1); m.set(b.id,w); adj.get(b.id).set(a.id,w);}
+  }
+  const nodeById=id=>nos.find(n=>n.id===id);
+  function ativar(list,energia,cor){
+    for(const c of list){ if(!c)continue;
+      c.ativ=clamp(c.ativ+energia,0,1); c.util=clamp(c.util+.03*energia,0,1); c.uses++; c.lastUse=tick;
+      for(const [j,w] of adj.get(c.id)){ const v=nodeById(j); if(!v)continue;
+        const flow=energia*w*.6; v.ativ=clamp(v.ativ+flow,0,1);
+        adj.get(c.id).set(j,clamp(w+.04*flow,0,1)); adj.get(j).set(c.id,adj.get(c.id).get(j));
+        if(flow>.14&&particles.length<MAXPART) particles.push({a:c.id,b:j,p:0,sp:.05+rnd(.05),col:cor||COL.mycelium,edge:true});
+      }
+    }
+  }
+  const ativos=n=>nos.slice().sort((a,b)=>b.ativ-a.ativ).slice(0,n);
+
+  function passoMicelio(){
+    tick++;
+    for(const c of nos){c.ativ*=.9; c.util*=.9985; c.idade++;}
+    for(const [i,m] of adj){ for(const [j,w] of m){ if(i<j){
+      let nw=w; if(rnd()<.5)nw*=.99; if(nw<.045){m.delete(j); adj.get(j).delete(i);} else {m.set(j,nw); adj.get(j).set(i,nw);} }}}
+    if(tick%7===0) consolidar();
+    if(tick%9===0) fundir();
+    if(tick%5===0) podar(false);
+    layout();
+  }
+  function consolidar(){ for(const c of ativos(8)){ for(const [j,w] of adj.get(c.id)){ const v=nodeById(j);
+    if(v&&v.ativ>.3){const nw=clamp(w+.06*(1-w),0,1); adj.get(c.id).set(j,nw); adj.get(j).set(c.id,nw);} }}}
+  function fundir(){
+    let best=null,val=.6;
+    for(const [i,m] of adj){ const ci=nodeById(i); if(!ci||ci.order>=3)continue;
+      for(const [j,w] of m){ if(j<=i)continue; const cj=nodeById(j); if(!cj||cj.order>=3)continue;
+        const v=w*.6+(ci.ativ+cj.ativ)*.2; if(v>val){val=v; best=[ci,cj];} } }
+    if(!best)return; const [ci,cj]=best;
+    const rot=ci.label.split(" ")[0].slice(0,6)+"·"+cj.label.split(" ")[0].slice(0,6);
+    const n=brotar(rot,(ci.conf+cj.conf)/2,clamp((ci.novid+cj.novid)/2+.2,0,1),"fusao");
+    if(!n)return; n.order=Math.max(ci.order,cj.order)+1; n.util=clamp(Math.max(ci.util,cj.util)+.1,0,1);
+    n.x=(ci.x+cj.x)/2; n.y=(ci.y+cj.y)/2;
+    conectar(n,ci,.5); conectar(n,cj,.5); fundidos++;
+    burst((n.x),(n.y),COL.idea,16,true);
+    emit("fusao",`duas ideias se fundem → «${n.label}»`,COL.idea);
+  }
+  function remover(c){
+    const i=nos.indexOf(c); if(i<0)return; nos.splice(i,1); byLabel.delete(c.label);
+    for(const [j,w] of adj.get(c.id)){adj.get(j)&&adj.get(j).delete(c.id);} adj.delete(c.id);
+  }
+  function podar(force){
+    const alvo=force?MAXN:Math.floor(MAXN*.94);
+    if(nos.length<=alvo&&!force)return;
+    const cand=nos.filter(c=>c.order===0&&c.util<.34&&tick-c.lastUse>32)
+      .sort((a,b)=>(a.util+a.ativ)-(b.util+b.ativ));
+    let need=Math.max(force?6:1, nos.length-alvo);
+    for(const c of cand){ if(need--<=0)break; remover(c); esquecidos++; }
+  }
+
+  // ── layout por molas (respira) ──
+  function layout(){
+    const n=nos.length; if(n<2)return;
+    for(const c of nos){ let fx=0,fy=0;
+      for(let k=0;k<Math.min(14,n);k++){ const o=nos[(Math.random()*n)|0]; if(o===c)continue;
+        const dx=c.x-o.x,dy=c.y-o.y,d2=dx*dx+dy*dy+.6,f=64/d2; fx+=dx*f; fy+=dy*f; }
+      for(const [j,w] of adj.get(c.id)){ const o=nodeById(j); if(o){fx+=(o.x-c.x)*.013*w; fy+=(o.y-c.y)*.013*w;} }
+      fx-=c.x*.004; fy-=c.y*.004;
+      c.vx=(c.vx+clamp(fx,-2.4,2.4))*.55; c.vy=(c.vy+clamp(fy,-2.4,2.4))*.55;
+      c.x=clamp(c.x+c.vx,-150,150); c.y=clamp(c.y+c.vy,-150,150);
+    }
+  }
+
+  // ── digestão: enzimas → curadoria → absorção → conexão ──
+  const CONF={manual:.9,mundo:.55,obra:.6};
+  function digerir(text,origem){
+    const conf=CONF[origem]??.5;
+    const words=norm(text).split(" ").filter(w=>w.length>=4&&!STOP.has(w)&&!/^\d+$/.test(w));
+    if(!words.length)return {aceitos:0,novos:0};
+    const freq=new Map(); for(const w of words)freq.set(w,(freq.get(w)||0)+1);
+    const terms=[...freq.entries()].sort((a,b)=>b[1]-a[1]).slice(0,40);
+    const fmax=terms[0][1]; const act=ativos(12).map(c=>c.id);
+    const aceitos=[]; let novos=0;
+    for(const [t,f] of terms){
+      const known=byLabel.has(t);
+      const novid=known?clamp(.25-.1*(nos[byLabel.get(t)].uses/10),.02,.3):clamp(.7+.3*rnd(),0,1);
+      const util=clamp(.3+.7*(f/fmax),0,1);
+      let conect=0; for(const id of act) if(adj.get(id))conect+=.1; conect=clamp(conect,0,1);
+      const desc=clamp(.3+.5*(1-f/fmax)+.2*(t.length>6),0,1);
+      const evid=f/(f+2);
+      const score=conf*(0.32*util+0.24*novid+0.22*conect+0.14*desc+0.08)*(0.5+0.5*evid);
+      if(score<0.34)continue;
+      const c=brotar(t,conf,novid,origem); if(!c)continue;
+      c.util=clamp(c.util+.15*util,0,1); aceitos.push(c); if(!known)novos++;
+    }
+    for(let i=0;i<terms.length;i++)for(let j=i+1;j<Math.min(i+6,terms.length);j++){
+      const ca=byLabel.get(terms[i][0]),cb=byLabel.get(terms[j][0]);
+      if(ca!=null&&cb!=null&&aceitos.some(x=>x.id===ca)&&aceitos.some(x=>x.id===cb))
+        conectar(nodeById(ca),nodeById(cb),.1);
+    }
+    if(aceitos.length){ ativar(aceitos.slice(0,8),.7,COL.spore); digeridos+=aceitos.length;
+      curiosidade=clamp(curiosidade+0.04*novos,0,1);
+      for(const c of aceitos.slice(0,10)) burst(c.x,c.y,COL.spore,3);
+    }
+    return {aceitos:aceitos.length,novos};
+  }
+  function forragear(){
+    const words=[]; for(let i=0;i<6;i++)words.push(pick(LEXICO));
+    const r=digerir(words.join(" "),"mundo");
+    curiosidade=clamp(curiosidade-0.4,0,1);
+    emit("forrageio",`forrageio: o mundo pinga «${words[0]}»`,COL.mycelium);
+    return r;
+  }
+
+  // ── hifas (subagentes) ──
+  function papelDe(g){ // g = pseudo-genoma
+    let best=PAPEIS[0],bv=-1;
+    const w={forrageadora:g.explor*1+g.percep*.5,digestora:g.voraz*1+g.criar*.4,
+      consolidadora:g.social*1+g.fertil*.3,exploradora:g.criar*.8+g.percep*.6,
+      planejadora:g.metab*.8+g.social*.4,avaliadora:g.agress*.9+g.percep*.4};
+    for(const [p,c] of PAPEIS){ if(w[p]>bv){bv=w[p];best=[p,c];} }
+    return best;
+  }
+  function nascerHifa(g){
+    g=g||{metab:rnd(),voraz:rnd(),social:rnd(),explor:rnd(),fertil:rnd(),criar:rnd(),percep:rnd(),agress:rnd()};
+    const [papel,cor]=papelDe(g);
+    hyphae.push({g,papel,cor,x:rnd(2)-1,y:rnd(2)-1,ang:rnd(6.28),energia:9,idade:0,prod:.3,tx:rnd(2)-1,ty:rnd(2)-1});
+  }
+  function passoHifas(){
+    for(const h of hyphae){
+      h.idade++; h.energia-=0.12+0.1*h.g.metab;
+      // deriva rumo a um alvo (no ecossistema) e age no micélio
+      h.x+=(h.tx-h.x)*.05+(rnd(.4)-.2); h.y+=(h.ty-h.y)*.05+(rnd(.4)-.2);
+      if(Math.hypot(h.tx-h.x,h.ty-h.y)<6||rnd()<.02){h.tx=rnd(160)-80;h.ty=rnd(160)-80;}
+      let r=0.03;
+      if(h.papel==="forrageadora"){curiosidade=clamp(curiosidade+.01,0,1); if(ativos(6).length){ativar([pick(ativos(6))],.3,h.cor);r=.15;}}
+      else if(h.papel==="digestora"){ if(rnd()<.5){forragear();r=.2;} }
+      else if(h.papel==="consolidadora"){consolidar(); const A=ativos(8); if(A.length>1){conectar(pick(A),pick(A),.06);r=.12;}}
+      else if(h.papel==="exploradora"){ const A=nos; if(A.length>1){const a=pick(A),b=pick(A);
+        if(a!==b&&!adj.get(a.id).has(b.id)){conectar(a,b,.05);ativar([a,b],.3,h.cor);r=.18;
+          if(particles.length<MAXPART)emit("hipotese",`hipótese: liga «${a.label}» ↔ «${b.label}»`,COL.violet);}}}
+      else if(h.papel==="planejadora"){r=.08;}
+      else if(h.papel==="avaliadora"){ const weak=nos.filter(c=>c.util<.2&&c.order===0&&tick-c.lastUse>25);
+        if(weak.length){remover(weak.sort((a,b)=>a.util-b.util)[0]); esquecidos++; r=.14;}}
+      h.energia+=clamp(r,-.2,.6); h.prod=h.prod*.85+.15*clamp(r*2,0,1);
+    }
+    // seleção + fusão + resiliência
+    hyphae=hyphae.filter(h=>h.energia>0&&h.idade<220);
+    if(hyphae.length<6&&rnd()<.5)nascerHifa();
+    if(hyphae.length>28){hyphae.sort((a,b)=>a.prod-b.prod); hyphae.splice(0,hyphae.length-28);}
+    if(rnd()<.12){ // fusão de duas hifas fracas do mesmo papel
+      const weak=hyphae.filter(h=>h.energia<6);
+      for(let i=0;i<weak.length;i++)for(let j=i+1;j<weak.length;j++){
+        if(weak[i].papel===weak[j].papel&&Math.hypot(weak[i].x-weak[j].x,weak[i].y-weak[j].y)<24){
+          weak[i].energia+=weak[j].energia*.8; hyphae.splice(hyphae.indexOf(weak[j]),1);
+          emit("fusao_hifa",`duas hifas ${weak[i].papel} se fundem`,COL.coral); return;
+        }}
+    }
+  }
+  function censoPapeis(){const m={}; for(const h of hyphae)m[h.papel]=(m[h.papel]||0)+1; return m;}
+  function genomaMedio(){const g={metab:0,voraz:0,social:0,explor:0,fertil:0,criar:0,percep:0,agress:0};
+    if(!hyphae.length)return g; for(const h of hyphae)for(const k in g)g[k]+=h.g[k];
+    for(const k in g)g[k]/=hyphae.length; return g;}
+
+  // ── cognição: métricas, fitness, reorganização ──
+  function computeMetrics(){
+    const n=nos.length; if(!n){metrics={coerencia:0,utilidade:0,complexidade:0,diversidade:0};return;}
+    let deg=0,linked=0; for(const c of nos){const d=adj.get(c.id).size; deg+=d; if(d)linked++;}
+    const conect=clamp(deg/n/6,0,1);
+    metrics.coerencia=clamp(.5*(linked/n)+.5*conect,0,1);
+    metrics.utilidade=clamp(nos.reduce((s,c)=>s+c.util,0)/n,0,1);
+    const orders=new Set(nos.map(c=>c.order));
+    metrics.complexidade=clamp(orders.size/4*.5+4*conect*(1-conect)*.5,0,1);
+    const orig=new Set(nos.map(c=>c.origem)), pre=new Set(nos.map(c=>c.label.slice(0,3)));
+    metrics.diversidade=clamp(orig.size/6*.5+pre.size/n*.5,0,1);
+    const cen=Object.keys(censoPapeis()).length/PAPEIS.length;
+    const prev=fitness;
+    fitness=0.34*metrics.coerencia+0.30*metrics.utilidade+0.20*metrics.complexidade+0.08*metrics.diversidade+0.08*cen;
+    if(fitness>melhor+.005){melhor=fitness;estagnado=0;}else estagnado++;
+    hist.push({f:fitness,...metrics}); if(hist.length>200)hist.shift();
+    if(estagnado>=26)reorganizar();
+    curiosidade=clamp(curiosidade*.99+.005,0,1);
+  }
+  function reorganizar(){estagnado=0;reorgs++;podar(true);fundir();fundir();
+    hyphae.sort((a,b)=>a.prod-b.prod); hyphae.splice(0,Math.min(3,Math.max(0,hyphae.length-12)));
+    emit("reorganizar",`reorganização autônoma da colônia (fitness ${fitness.toFixed(2)})`,COL.idea);
+    flash=1;
+  }
+
+  // ── eventos / partículas ──
+  function emit(type,txt,cor){ev.unshift({type,txt,cor,t:tick}); if(ev.length>40)ev.pop(); renderTicker();}
+  function burst(x,y,cor,n,big){ for(let i=0;i<n&&particles.length<MAXPART;i++){const a=rnd(6.28),s=.4+rnd(1.6);
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:14+rnd(18),col:cor,free:true,big});}}
+  let flash=0;
+
+  // ══════════════════ SIMULAÇÃO ══════════════════
+  let paused=false, mode=0, zoom=1, cam={x:0,y:0}, sinceForage=0;
+  function stepSim(){
+    if(paused)return;
+    passoMicelio(); passoHifas();
+    sinceForage++;
+    if(curiosidade>0.55&&sinceForage>8){forragear();sinceForage=0;}
+    if(tick%14===0)brotarObra();
+    computeMetrics();
+  }
+  function brotarObra(){ // a base criativa: uma "obra" semeia um conceito
+    const conc=pick(nos)||null; if(!conc)return;
+    ativar([conc],.6,COL.mycelium);
+    if(rnd()<.4){const g={metab:rnd(),voraz:rnd(),social:rnd(),explor:rnd(),fertil:rnd(),criar:rnd()*.6+.4,percep:rnd(),agress:rnd()*.5};nascerHifa(g);}
+  }
+
+  // ══════════════════ RENDER ══════════════════
+  const cv=document.getElementById("c"), ctx=cv.getContext("2d");
+  let W=0,H=0,DPR=1;
+  function resize(){const r=cv.parentElement.getBoundingClientRect();DPR=Math.min(devicePixelRatio||1,2);
+    W=Math.max(2,r.width|0);H=Math.max(2,r.height|0);cv.width=W*DPR;cv.height=H*DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);}
+  new ResizeObserver(resize).observe(cv.parentElement);
+
+  const g2p=(x,y)=>{const s=Math.min(W,H)/340*zoom; return [W/2+(x-cam.x)*s, H/2+(y-cam.y)*s];};
+
+  function bg(){ctx.globalCompositeOperation="source-over";
+    ctx.fillStyle="rgba(5,7,15,.34)";ctx.fillRect(0,0,W,H); // trilha (motion)
+    if(flash>0){ctx.fillStyle=rgba(COL.idea,flash*.06);ctx.fillRect(0,0,W,H);flash*=.9;if(flash<.02)flash=0;}}
+
+  function nodeColor(c){return c.order>0?mix(COL.idea,[255,255,255],.2*Math.min(c.order,3)):hsv(c.hue,.6,.55+.45*(0.5*c.util+0.3*c.conf+0.2*c.ativ));}
+  function glowDisc(x,y,r,col,a){const g=ctx.createRadialGradient(x,y,0,x,y,r);
+    g.addColorStop(0,rgba(col,a));g.addColorStop(.4,rgba(col,a*.5));g.addColorStop(1,rgba(col,0));
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,6.283);ctx.fill();}
+
+  function drawEdges(mult,minw){ctx.globalCompositeOperation="lighter";ctx.lineWidth=1;
+    for(const [i,m] of adj){if(!(i<1e9))continue; for(const [j,w] of m){ if(i<j){ if(w<(minw||0))continue;
+      const a=nodeById(i),b=nodeById(j); if(!a||!b)continue; const[ax,ay]=g2p(a.x,a.y),[bx,by]=g2p(b.x,b.y);
+      ctx.strokeStyle=rgba(mix(COL.void,COL.mycelium,clamp(.2+w,.2,1)),(.12+.5*w)*mult);
+      ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.stroke(); }}}}
+
+  function drawParticles(){ctx.globalCompositeOperation="lighter";
+    particles=particles.filter(p=>{
+      if(p.edge){const a=nodeById(p.a),b=nodeById(p.b); if(!a||!b)return false; p.p+=p.sp; if(p.p>=1)return false;
+        const[ax,ay]=g2p(a.x,a.y),[bx,by]=g2p(b.x,b.y); glowDisc(ax+(bx-ax)*p.p,ay+(by-ay)*p.p,2.6,p.col,.9); return true;}
+      else{p.life--; if(p.life<=0)return false; const[px,py]=g2p(p.x,p.y); p.x+=p.vx;p.y+=p.vy;
+        glowDisc(px,py,p.big?3.4:2,p.col,clamp(p.life/22,0,1)); return true;}
+    });}
+
+  function drawNodes(sz){ctx.globalCompositeOperation="lighter";
+    for(const c of nos){const[x,y]=g2p(c.x,c.y); const col=nodeColor(c);
+      const r=(sz||1)*(2.4+c.util*3+(c.order>0?2:0)); glowDisc(x,y,r*2.1,col,.16);
+      glowDisc(x,y,r,col,.55+.45*c.ativ);
+      if(c.ativ>.6){glowDisc(x,y,r*.5,[255,255,255],c.ativ);} }}
+
+  function drawHyphae(scale,sc){ctx.globalCompositeOperation="lighter";
+    for(const h of hyphae){const[x,y]=g2p(h.x,h.y); glowDisc(x,y,2.6,h.cor,.5+.4*clamp(h.energia/14,0,1));} }
+
+  // modo 1 · micélio
+  function vMicelio(){bg();drawEdges(1);drawParticles();drawNodes(1);drawHyphae();}
+  // modo 2 · fluxo
+  function vFluxo(){bg();ctx.globalCompositeOperation="lighter";
+    for(const c of nos){if(c.ativ>.08){const[x,y]=g2p(c.x,c.y);glowDisc(x,y,4+c.ativ*10,nodeColor(c),.12+.5*c.ativ);}}
+    drawEdges(1.3,.24);
+    // pacotes de energia percorrendo as hifas fortes
+    ctx.globalCompositeOperation="lighter";
+    for(const [i,m] of adj){for(const [j,w] of m){if(i<j&&w>=.28){const a=nodeById(i),b=nodeById(j);if(!a||!b)continue;
+      const ph=((tick*.06+(i*13+j*7)%10/10)%1);const[ax,ay]=g2p(a.x,a.y),[bx,by]=g2p(b.x,b.y);
+      glowDisc(ax+(bx-ax)*ph,ay+(by-ay)*ph,2.4,mix(COL.mycelium,[255,255,255],.3),w);}}}
+    drawParticles();
+    for(const c of ativos(6)){const[x,y]=g2p(c.x,c.y);glowDisc(x,y,3,[255,255,255],.8);}}
+  // modo 3 · mapa cognitivo
+  function vMapa(){bg();drawEdges(.7);drawNodes(.8);
+    ctx.globalCompositeOperation="source-over";ctx.font="11px "+getComputedStyle(document.body).fontFamily;
+    ctx.textAlign="left";
+    for(const c of nos.slice().sort((a,b)=>(b.util+b.ativ)-(a.util+a.ativ)).slice(0,16)){
+      const[x,y]=g2p(c.x,c.y); ctx.fillStyle=c.order>0?rgb(COL.idea):"rgba(233,237,251,.82)";
+      ctx.fillText(c.label.slice(0,16),x+6,y+3);}}
+  // modo 4 · genoma
+  function vGenoma(){bg();ctx.globalCompositeOperation="lighter";
+    const hx=W*0.27, amp=Math.min(W*0.14,90);
+    for(let y=0;y<H;y+=4){const t=y/28+tick*.05;const a=Math.sin(t)*amp,b=Math.sin(t+Math.PI)*amp;
+      const c1=hsv((y/H)*.5,.6,1),c2=hsv((y/H)*.5+.5,.6,1);
+      glowDisc(hx+a,y,2,c1,.9);glowDisc(hx+b,y,2,c2,.9);
+      if(((y/4)|0)%3===0){ctx.strokeStyle=rgba(COL.mycelium,.18);ctx.beginPath();ctx.moveTo(hx+a,y);ctx.lineTo(hx+b,y);ctx.stroke();}}
+    ctx.globalCompositeOperation="source-over";
+    const gm=genomaMedio(),gx=W*.52; let gy=44;
+    ctx.textAlign="left";ctx.font="11px "+getComputedStyle(document.body).fontFamily;
+    ctx.fillStyle=rgb(COL.haze);ctx.fillText("GENOMA MÉDIO DA COLÔNIA",gx,gy);gy+=18;
+    const genes=Object.keys(gm),GH=Math.min(20,(H-160)/genes.length);
+    genes.forEach((k,i)=>{const v=gm[k],y=gy+i*GH;ctx.fillStyle=rgb(COL.haze);ctx.fillText(k,gx,y+9);
+      ctx.fillStyle="#141a2c";ctx.fillRect(gx+70,y,120,7);ctx.fillStyle=rgb(hsv(i/8,.5,.95));ctx.fillRect(gx+70,y,120*v,7);
+      ctx.fillStyle=rgb(COL.lume||[233,237,251]);ctx.fillText(v.toFixed(2),gx+198,y+9);});
+    let yb=gy+genes.length*GH+16; const cen=censoPapeis(),tot=Math.max(1,hyphae.length);
+    ctx.fillStyle=rgb(COL.haze);ctx.fillText("ESPECIALIZAÇÃO DAS HIFAS",gx,yb);yb+=16;
+    PAPEIS.forEach(([p,c],i)=>{const n=cen[p]||0,y=yb+i*18;ctx.fillStyle=rgb(c);ctx.fillText(p,gx,y+8);
+      ctx.fillStyle="#141a2c";ctx.fillRect(gx+96,y+1,90,6);ctx.fillStyle=rgb(c);ctx.fillRect(gx+96,y+1,90*(n/tot),6);
+      ctx.fillStyle=rgb(COL.haze);ctx.fillText(String(n),gx+192,y+8);});}
+  // modo 5 · ecossistema
+  function vEcossistema(){bg();ctx.globalCompositeOperation="lighter";
+    const[lx,ly]=g2p(0,0);
+    // pólen difuso
+    for(const c of nos){const[x,y]=g2p(c.x,c.y);glowDisc(x,y,1.4,[40,70,60],.4);}
+    for(const h of hyphae){const[x,y]=g2p(h.x,h.y);
+      glowDisc(x,y,2.4+2.4*clamp(h.energia/14,0,1),h.cor,.6);
+      const[tx,ty]=g2p(h.tx,h.ty);ctx.strokeStyle=rgba(h.cor,.15);ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(tx,ty);ctx.stroke();}
+    glowDisc(lx,ly,10,mix(COL.mycelium,[255,255,255],.4),1);glowDisc(lx,ly,22,COL.mycelium,.2);
+    drawParticles();}
+  // modo 6 · timeline
+  function vTimeline(){bg();ctx.globalCompositeOperation="source-over";
+    const series=[["fitness",hist.map(h=>h.f),COL.idea],["coerência",hist.map(h=>h.coerencia),COL.mycelium],
+      ["utilidade",hist.map(h=>h.utilidade),COL.spore],["complexidade",hist.map(h=>h.complexidade),COL.violet],
+      ["diversidade",hist.map(h=>h.diversidade),COL.coral]];
+    const pad=54,bandH=(H-pad)/series.length;
+    series.forEach(([nm,s,c],si)=>{const baseY=pad+bandH*si+bandH*.72;
+      ctx.strokeStyle="rgba(27,34,54,.6)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(16,baseY);ctx.lineTo(W-16,baseY);ctx.stroke();
+      if(s.length>1){ctx.globalCompositeOperation="lighter";ctx.strokeStyle=rgb(c);ctx.lineWidth=1.6;ctx.beginPath();
+        const n=s.length,ww=W-32;for(let k=0;k<n;k++){const x=16+ww*k/(n-1),y=baseY-clamp(s[k],0,1)*bandH*.6;k?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();
+        const lx=16+ww,ly=baseY-clamp(s[n-1],0,1)*bandH*.6;glowDisc(lx,ly,3,c,1);ctx.globalCompositeOperation="source-over";}
+      ctx.fillStyle=rgb(c);ctx.textAlign="left";ctx.font="11px "+getComputedStyle(document.body).fontFamily;
+      ctx.fillText(nm.toUpperCase()+"  "+(s.length?s[s.length-1].toFixed(2):"0.00"),18,pad+bandH*si+16);});
+    ctx.fillStyle=rgb(COL.haze);ctx.textAlign="right";ctx.fillText("REORGANIZAÇÕES: "+reorgs,W-18,26);ctx.textAlign="left";}
+
+  const RENDER=[vMicelio,vFluxo,vMapa,vGenoma,vEcossistema,vTimeline];
+
+  // ══════════════════ HUD / DOM ══════════════════
+  const $=id=>document.getElementById(id);
+  function renderTicker(){const f=$("ticker");f.innerHTML="";
+    ev.slice(0,4).forEach((e,i)=>{const d=document.createElement("div");d.className="ev"+(i===2?" fade":i===3?" fade2":"");
+      d.innerHTML=`<span class="dot" style="color:${rgb(e.cor)}"></span><span class="txt">${e.txt}</span><span class="t">t${e.t}</span>`;
+      f.appendChild(d);});}
+  function setBar(id,v){$("m_"+id).textContent=v.toFixed(2);$("b_"+id).style.width=(v*100).toFixed(0)+"%";}
+  let hudAcc=0;
+  function hud(){setBar("fit",fitness);setBar("coe",metrics.coerencia);setBar("uti",metrics.utilidade);
+    setBar("cpx",metrics.complexidade);setBar("div",metrics.diversidade);setBar("cur",curiosidade);
+    $("s_nos").textContent=nos.length;$("s_are").textContent=[...adj.values()].reduce((s,m)=>s+m.size,0)/2|0;
+    $("s_hif").textContent=hyphae.length;$("s_fus").textContent=fundidos;$("s_dig").textContent=digeridos;$("s_esq").textContent=esquecidos;}
+
+  // tabs
+  const tabsEl=$("tabs");
+  MODOS.forEach(([id,nm],i)=>{const b=document.createElement("button");
+    b.innerHTML=`<span class="n">${i+1}</span>${nm}`;b.setAttribute("aria-pressed",i===0);
+    b.onclick=()=>setMode(i);tabsEl.appendChild(b);});
+  function setMode(i){mode=i;[...tabsEl.children].forEach((b,k)=>b.setAttribute("aria-pressed",k===i));
+    const c=[COL.mycelium,COL.spore,COL.mycelium,COL.violet,COL.coral,COL.idea][i];
+    tabsEl.children[i].style.setProperty("--myc",rgb(c));
+    $("modelabel").innerHTML=`modo <b>${i+1} · ${MODOS[i][1]}</b>`;}
+  setMode(0);
+
+  // controles
+  $("feedbtn").onclick=()=>{const t=$("feedbox").value.trim(); if(t){const r=digerir(t,"manual");
+    emit("digestao",`digestão manual: ${r.aceitos} aceitos, ${r.novos} novos`,COL.spore);$("feedbox").value="";}};
+  $("pausebtn").onclick=()=>{paused=!paused;$("pausebtn").textContent=paused?"Retomar":"Pausar";
+    $("livetxt").textContent=paused?"pausa":"viva";$("pulse").style.background=paused?rgb(COL.haze):rgb(COL.spore);
+    $("pulse").style.boxShadow=paused?"none":"0 0 10px "+rgb(COL.spore);};
+  $("zoomin").onclick=()=>zoom=clamp(zoom*1.25,.4,4);
+  $("zoomout").onclick=()=>zoom=clamp(zoom/1.25,.4,4);
+  $("reseed").onclick=()=>{reset();};
+  addEventListener("keydown",e=>{if(e.target.tagName==="TEXTAREA")return;
+    if(e.key>="1"&&e.key<="6")setMode(+e.key-1);
+    else if(e.key==="+"||e.key==="=")zoom=clamp(zoom*1.25,.4,4);
+    else if(e.key==="-"||e.key==="_")zoom=clamp(zoom/1.25,.4,4);
+    else if(e.key===" "){e.preventDefault();$("pausebtn").click();}});
+
+  // ══════════════════ LOOP ══════════════════
+  let simAcc=0,last=performance.now();
+  function frame(now){const dt=now-last;last=now;
+    simAcc+=dt; if(simAcc>90){stepSim();simAcc=0;}
+    resize.done||resize();resize.done=true;
+    RENDER[mode](); ctx.globalCompositeOperation="source-over";
+    hudAcc+=dt; if(hudAcc>220){hud();hudAcc=0;}
+    requestAnimationFrame(frame);
+  }
+  reset(); resize(); hud(); renderTicker(); requestAnimationFrame(frame);
+})();
+</script>
