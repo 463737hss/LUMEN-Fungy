@@ -39,6 +39,15 @@ microscópio visual em tempo real.
 - **Cognição** — modelo interno do mundo (predição), raciocínio causal (ação→efeito),
   planejamento (metas que reduzem déficits), curiosidade (erro de predição + novidade)
   e **autoavaliação com reorganização autônoma** da colônia.
+- **Descoberta por analogia** — a colônia procura conceitos de **assinatura
+  estrutural parecida mas distantes no grafo** e arrisca uma ponte (hipótese). Um
+  **ciclo de hipóteses** a confirma (✷ descoberta, quando a ponte se sustenta) ou a
+  refuta. Exploração deixa de ser ruído: vira aprendizado testável.
+- **Sonho & insights** — periodicamente a colônia **sonha**: relembra e recombina a
+  memória e **destila aforismos** (✦ insights) de tríades fortes — na língua própria
+  da LUMEN e traduzidos —, salvos em `lumen_criacoes/lumen_insights.txt`.
+- **Especiação** — os subagentes se diferenciam em **linhagens** (radiação adaptativa)
+  visíveis na linha temporal e no censo.
 - **Supervisor** — contenção real: objetivo e limites **imutáveis** (a colônia não
   reescreve a própria segurança), tetos fiscalizados a cada tick, allowlist de rede,
   escrita só no sandbox, *kill-switch*. Zero exec/eval/subprocess/rede-livre.
@@ -58,8 +67,14 @@ hipótese, fusão e reorganização tem manifestação visual sincronizada.
 
 **Teclas:** `1`–`6` escolhem o modo · `Tab` alterna · `+`/`-` zoom ·
 `espaço` pausa · `q` sai.
+**Mouse (desktop):** roda = zoom · arrasta = *pan* · clique = **inspeciona** um
+conceito (mostra grau/utilidade e realça a vizinhança).
 
-## Uso (Termux)
+## Rodar
+
+Roda igual em **computador (Windows / macOS / Linux)** e no **Termux** — Python 3 puro,
+sem dependências. No Windows as cores ANSI são habilitadas automaticamente; o mouse
+funciona em terminais POSIX (Linux/macOS/Termux).
 
 ```bash
 python lumen_caixa.py                          # organismo-colmeia + microscópio
@@ -68,14 +83,19 @@ python lumen_caixa.py --alimentar texto.txt     # alimenta com conhecimento de q
 python lumen_caixa.py --inbox ./lumen_inbox     # digere .txt de uma pasta aos poucos
 python lumen_caixa.py --online                  # abre a janela (forrageio, sob travas)
 python lumen_caixa.py --leve                    # menos partículas (aparelhos modestos)
+python lumen_caixa.py --sem-mouse               # desliga o mouse
 python lumen_caixa.py --classico                # a tela única original (A Caixa Viva)
 python lumen_caixa.py --headless --ticks 60     # sem tela (teste/execução em lote)
 python lumen_caixa.py --reset                   # recomeça a colônia
 ```
 
+**Versão web** — `microscopio.html` é o mesmo organismo portado para HTML/Canvas
+(abre em qualquer navegador, mouse e todos os modos), ideal para computador. É um
+arquivo único e autossuficiente, sem dependências.
+
 Sem dependências — só a biblioteca padrão do Python 3. O estado vivo
-(`lumen_mente.json`, save versão 3 retrocompatível com a base) e as obras
-(`lumen_criacoes/`) são gerados em runtime e ignorados pelo git.
+(`lumen_mente.json`, save versão 3 retrocompatível com a base), as obras e os
+insights (`lumen_criacoes/`) são gerados em runtime e ignorados pelo git.
 
 ## Segurança e alinhamento
 

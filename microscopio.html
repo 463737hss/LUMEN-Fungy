@@ -78,6 +78,11 @@
   .stat .v{font-size:19px; font-variant-numeric:tabular-nums; color:var(--lume); margin-top:2px}
   .stat .v small{font-size:11px; color:var(--dim)}
 
+  .inslist{display:flex; flex-direction:column; gap:7px; max-height:150px; overflow-y:auto}
+  .ins{border-left:2px solid var(--idea); padding:2px 0 2px 8px}
+  .ins .pt{font-family:var(--sans); font-size:12.5px; line-height:1.4; color:var(--lume)}
+  .ins .lg{font-size:10px; letter-spacing:.12em; color:var(--haze); margin-top:2px}
+  .ins.empty{color:var(--dim); font-family:var(--sans); font-size:12px; border-color:var(--edge)}
   .feed{display:flex; flex-direction:column; gap:8px}
   .feed textarea{resize:none; height:58px; font-family:var(--sans); font-size:12.5px; line-height:1.45;
     color:var(--lume); background:#0b0f1d; border:1px solid var(--edge); border-radius:8px; padding:8px}
@@ -145,9 +150,16 @@
           <div class="stat"><div class="k">Hifas</div><div class="v" id="s_are">0</div></div>
           <div class="stat"><div class="k">Subagentes</div><div class="v" id="s_hif">0</div></div>
           <div class="stat"><div class="k">Ideias fundidas</div><div class="v" id="s_fus">0</div></div>
+          <div class="stat"><div class="k">Descobertas</div><div class="v" id="s_desc">0</div></div>
+          <div class="stat"><div class="k">Linhagens</div><div class="v" id="s_esp">0</div></div>
           <div class="stat"><div class="k">Digeridos</div><div class="v" id="s_dig">0</div></div>
           <div class="stat"><div class="k">Esquecidos</div><div class="v" id="s_esq">0</div></div>
         </div>
+      </div>
+
+      <div class="card">
+        <h3>Insights destilados <span id="s_ins" style="color:var(--idea)">0</span></h3>
+        <div id="inslist" class="inslist"></div>
       </div>
 
       <div class="card feed">
@@ -199,12 +211,15 @@
   // ══════════════════ ESTADO DO ORGANISMO ══════════════════
   let nos, byLabel, adj, hyphae, particles, hist, ev, metrics, tick, seq;
   let curiosidade, surpresa, fitness, melhor, estagnado, fundidos, esquecidos, digeridos, reorgs;
+  let hipoteses, descobertas, insights, sonhos, diario, aforContador;
 
   function reset(){
     nos=[]; byLabel=new Map(); adj=new Map(); hyphae=[]; particles=[]; hist=[]; ev=[];
     metrics={coerencia:0,utilidade:0,complexidade:0,diversidade:0}; tick=0; seq=0;
     curiosidade=.35; surpresa=0; fitness=0; melhor=0; estagnado=0;
     fundidos=0; esquecidos=0; digeridos=0; reorgs=0;
+    hipoteses=[]; descobertas=0; insights=0; sonhos=0; diario=[]; aforContador=0;
+    foco=null; renderInsights();
     const seed=[];
     for(const w of shuffle(LEXICO.slice()).slice(0,18)){const c=brotar(w,.72,.6,"semente"); if(c)seed.push(c);}
     for(let i=0;i<26;i++){const a=pick(seed),b=pick(seed); if(a&&b&&a!==b)conectar(a,b,.16);}
@@ -414,6 +429,56 @@
     flash=1;
   }
 
+  function especies(){ // linhagens por recorte grosso de genes-chave (0/1)
+    const s=new Set(); for(const h of hyphae)s.add([h.g.voraz,h.g.social,h.g.explor,h.g.agress].map(v=>Math.round(v)).join("")); return s.size;}
+
+  // ── cognição generativa profunda: analogia → descoberta ──
+  function assinatura(c){const viz=adj.get(c.id);const og={};for(const j of viz.keys()){const v=nodeById(j);if(v)og[v.origem]=(og[v.origem]||0)+1;}
+    let dom=c.origem,mx=-1;for(const k in og)if(og[k]>mx){mx=og[k];dom=k;} return Math.min(viz.size,6)+"|"+c.order+"|"+dom;}
+  function descobrir(){ // acha dois conceitos análogos mas distantes e arrisca uma ponte
+    if(nos.length<6)return; const A=[];for(let i=0;i<14;i++)A.push(pick(nos));
+    for(let i=0;i<A.length;i++)for(let j=i+1;j<A.length;j++){const a=A[i],b=A[j];
+      if(a.id===b.id||adj.get(a.id).has(b.id))continue;
+      let comum=false;for(const k of adj.get(a.id).keys())if(adj.get(b.id).has(k)){comum=true;break;}
+      if(comum)continue;
+      if(assinatura(a)===assinatura(b)){conectar(a,b,.09);ativar([a,b],.35,COL.violet);
+        hipoteses.push({a:a.id,b:b.id,nasc:tick});
+        emit("analogia",`analogia: «${a.label}» seria como «${b.label}»?`,COL.violet);return;}}}
+  function cicloHipoteses(){ // confirma (descoberta) ou refuta cada hipótese viva
+    const vivas=[];
+    for(const h of hipoteses){const a=nodeById(h.a),b=nodeById(h.b);const e=a&&b?adj.get(h.a).get(h.b):undefined;
+      if(!a||!b||e===undefined)continue;
+      if(tick-h.nasc<5){vivas.push(h);continue;}
+      let integrou=false;for(const k of adj.get(a.id).keys())if(adj.get(b.id).has(k)){integrou=true;break;}
+      if((e>0.10&&(a.ativ+b.ativ)>0.20)||integrou){conectar(a,b,.16);
+        a.util=clamp(a.util+.06,0,1);b.util=clamp(b.util+.06,0,1);descobertas++;
+        curiosidade=clamp(curiosidade+.08,0,1);burst((a.x+b.x)/2,(a.y+b.y)/2,COL.violet,20,true);
+        emit("descoberta",`✷ DESCOBERTA: «${a.label}» ↔ «${b.label}» — a ponte se sustentou`,[255,120,235]);}
+      else{adj.get(a.id).delete(b.id);adj.get(b.id).delete(a.id);}}
+    hipoteses=vivas.slice(-24);}
+  // ── aforista: destila um insight de uma tríade forte, na língua da LUMEN + PT ──
+  const AF_V=["nasce de","atravessa","guarda","ecoa em","dobra-se sobre","alimenta","dissolve","entrelaça","ilumina","responde a","germina em","sustenta"];
+  const AF_LIG=["e","—","onde","enquanto","até que","porque","assim como"];
+  const raizConlang=w=>{let h=0;for(const ch of w)h=(h*131+ch.charCodeAt(0))>>>0;const V="AEIOU",C="KRZNVXTML";let r="",n=2+(h%2);for(let i=0;i<n;i++){r+=C[(h>>(i*3))%C.length]+V[(h>>(i*2))%V.length];}return r;};
+  function destilar(){
+    if(nos.length<3)return null;
+    const centro=nos.reduce((m,c)=>(c.util*.6+c.ativ*.4)>(m.util*.6+m.ativ*.4)?c:m);
+    const viz=[...adj.get(centro.id).entries()].sort((a,b)=>b[1]-a[1]).map(([j])=>nodeById(j)).filter(Boolean).slice(0,2);
+    let outros=viz; if(outros.length<2){const ex=nos.filter(c=>c.id!==centro.id);outros=outros.concat([pick(ex),pick(ex)]).filter(Boolean).slice(0,2);}
+    if(outros.length<2)return null;
+    const [a,b,c]=[centro.label,outros[0].label,outros[1].label]; aforContador++;
+    const pt=`${a[0].toUpperCase()+a.slice(1)} ${pick(AF_V)} ${b}, ${pick(AF_LIG)} ${c} ${pick(AF_V)} ${a}.`;
+    const lingua=[a,b,c].map(w=>raizConlang(w).toUpperCase()).join(" · ")+" "+aforContador;
+    return {pt,lingua,conceitos:[a,b,c]};}
+  function sonhar(){ // recombina memória e às vezes destila um insight
+    sonhos++; if(nos.length<4)return;
+    const sem=[];for(let i=0;i<4;i++)sem.push(pick(nos)); ativar(sem,.5,[120,160,255]);
+    for(const h of hipoteses.slice(-4)){const a=nodeById(h.a),b=nodeById(h.b);if(a&&b)ativar([a,b],.3,COL.violet);}
+    consolidar(); fundir();
+    if(Math.random()<.6){const ins=destilar(); if(ins){insights++; diario.unshift(ins); if(diario.length>8)diario.pop();
+      emit("insight",`✦ insight: ${ins.pt}`,COL.idea); renderInsights();}}
+    emit("sonho",`sonho: recombina ${sem.length} conceitos na memória`,[120,160,255]);}
+
   // ── eventos / partículas ──
   function emit(type,txt,cor){ev.unshift({type,txt,cor,t:tick}); if(ev.length>40)ev.pop(); renderTicker();}
   function burst(x,y,cor,n,big){ for(let i=0;i<n&&particles.length<MAXPART;i++){const a=rnd(6.28),s=.4+rnd(1.6);
@@ -421,12 +486,15 @@
   let flash=0;
 
   // ══════════════════ SIMULAÇÃO ══════════════════
-  let paused=false, mode=0, zoom=1, cam={x:0,y:0}, sinceForage=0;
+  let paused=false, mode=0, zoom=1, cam={x:0,y:0}, sinceForage=0, foco=null, arraste=null;
   function stepSim(){
     if(paused)return;
     passoMicelio(); passoHifas();
     sinceForage++;
     if(curiosidade>0.55&&sinceForage>8){forragear();sinceForage=0;}
+    if(tick%5===0)descobrir();
+    if(tick%3===0)cicloHipoteses();
+    if(tick%16===0)sonhar();
     if(tick%14===0)brotarObra();
     computeMetrics();
   }
@@ -478,8 +546,18 @@
   function drawHyphae(scale,sc){ctx.globalCompositeOperation="lighter";
     for(const h of hyphae){const[x,y]=g2p(h.x,h.y); glowDisc(x,y,2.6,h.cor,.5+.4*clamp(h.energia/14,0,1));} }
 
+  // conceito inspecionado pelo clique: anel + rótulo + vizinhança realçada
+  function drawFoco(){if(foco==null)return;const c=nodeById(foco);if(!c){foco=null;return;}
+    const[x,y]=g2p(c.x,c.y);ctx.globalCompositeOperation="lighter";
+    for(const [j,w] of adj.get(c.id)){const v=nodeById(j);if(!v)continue;const[vx,vy]=g2p(v.x,v.y);
+      ctx.strokeStyle=rgba(COL.idea,.7);ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(vx,vy);ctx.stroke();}
+    const r=8+2*Math.sin(tick*.2);ctx.strokeStyle=rgba([255,255,255],.9);ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.arc(x,y,r+6,0,6.283);ctx.stroke();
+    ctx.globalCompositeOperation="source-over";ctx.fillStyle=rgb(COL.lume||[233,237,251]);
+    ctx.font="13px "+getComputedStyle(document.body).fontFamily;ctx.textAlign="left";
+    ctx.fillText(`«${c.label}»  grau ${adj.get(c.id).size} · util ${c.util.toFixed(2)}`,x+r+10,y+4);}
   // modo 1 · micélio
-  function vMicelio(){bg();drawEdges(1);drawParticles();drawNodes(1);drawHyphae();}
+  function vMicelio(){bg();drawEdges(1);drawParticles();drawNodes(1);drawHyphae();drawFoco();}
   // modo 2 · fluxo
   function vFluxo(){bg();ctx.globalCompositeOperation="lighter";
     for(const c of nos){if(c.ativ>.08){const[x,y]=g2p(c.x,c.y);glowDisc(x,y,4+c.ativ*10,nodeColor(c),.12+.5*c.ativ);}}
@@ -552,11 +630,16 @@
       d.innerHTML=`<span class="dot" style="color:${rgb(e.cor)}"></span><span class="txt">${e.txt}</span><span class="t">t${e.t}</span>`;
       f.appendChild(d);});}
   function setBar(id,v){$("m_"+id).textContent=v.toFixed(2);$("b_"+id).style.width=(v*100).toFixed(0)+"%";}
+  function renderInsights(){const el=$("inslist");if(!el)return;$("s_ins").textContent=insights;
+    if(!diario.length){el.innerHTML='<div class="ins empty">Ainda destilando… os aforismos surgem dos sonhos da colônia.</div>';return;}
+    el.innerHTML=""; for(const d of diario.slice(0,6)){const x=document.createElement("div");x.className="ins";
+      x.innerHTML=`<div class="pt">${d.pt}</div><div class="lg">${d.lingua}</div>`;el.appendChild(x);}}
   let hudAcc=0;
   function hud(){setBar("fit",fitness);setBar("coe",metrics.coerencia);setBar("uti",metrics.utilidade);
     setBar("cpx",metrics.complexidade);setBar("div",metrics.diversidade);setBar("cur",curiosidade);
     $("s_nos").textContent=nos.length;$("s_are").textContent=[...adj.values()].reduce((s,m)=>s+m.size,0)/2|0;
-    $("s_hif").textContent=hyphae.length;$("s_fus").textContent=fundidos;$("s_dig").textContent=digeridos;$("s_esq").textContent=esquecidos;}
+    $("s_hif").textContent=hyphae.length;$("s_fus").textContent=fundidos;$("s_dig").textContent=digeridos;$("s_esq").textContent=esquecidos;
+    $("s_desc").textContent=descobertas;$("s_esp").textContent=especies();$("s_ins").textContent=insights;}
 
   // tabs
   const tabsEl=$("tabs");
@@ -583,6 +666,21 @@
     else if(e.key==="+"||e.key==="=")zoom=clamp(zoom*1.25,.4,4);
     else if(e.key==="-"||e.key==="_")zoom=clamp(zoom/1.25,.4,4);
     else if(e.key===" "){e.preventDefault();$("pausebtn").click();}});
+
+  // ── mouse (desktop): roda=zoom, arrasta=pan, clique=inspecionar conceito ──
+  const p2g=(px,py)=>{const s=Math.min(W,H)/340*zoom;return[cam.x+(px-W/2)/s,cam.y+(py-H/2)/s];};
+  cv.addEventListener("wheel",e=>{e.preventDefault();zoom=clamp(zoom*(e.deltaY<0?1.12:1/1.12),.4,4);},{passive:false});
+  cv.addEventListener("mousedown",e=>{arraste={x:e.clientX,y:e.clientY,moved:false};});
+  addEventListener("mousemove",e=>{if(!arraste)return;const dx=e.clientX-arraste.x,dy=e.clientY-arraste.y;
+    if(Math.abs(dx)+Math.abs(dy)>3)arraste.moved=true;
+    const s=Math.min(W,H)/340*zoom;cam.x-=dx/s;cam.y-=dy/s;arraste.x=e.clientX;arraste.y=e.clientY;});
+  addEventListener("mouseup",e=>{
+    if(arraste&&!arraste.moved&&mode<3){const r=cv.getBoundingClientRect();
+      const[gx,gy]=p2g(e.clientX-r.left,e.clientY-r.top);
+      let best=null,bd=1e9;for(const c of nos){const d=(c.x-gx)**2+(c.y-gy)**2;if(d<bd){bd=d;best=c;}}
+      if(best&&bd<600){foco=(foco===best.id?null:best.id);}}
+    arraste=null;});
+  cv.style.cursor="grab";
 
   // ══════════════════ LOOP ══════════════════
   let simAcc=0,last=performance.now();

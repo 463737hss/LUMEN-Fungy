@@ -2775,6 +2775,15 @@ class Colonia:
         d = Counter(self.papel(b) for b in mundo.bichos)
         return d
 
+    _GENES_SP = ("voraz", "social", "explor", "agress")
+    def especies(self, mundo):
+        """Especiação emergente: agrupa genomas em linhagens por um recorte
+        grosso de genes-chave (0/1 cada). Poucas → colônia homogênea; muitas →
+        radiação adaptativa. Máx 2^4 = 16 linhagens possíveis."""
+        if not mundo.bichos:
+            return 0
+        return len({tuple(round(b.g[k]) for k in self._GENES_SP) for b in mundo.bichos})
+
     def dump(self):
         return {"papeis": {str(i): p for i, p in list(self.papeis.items())[:250]},
                 "produt": {str(i): round(v, 3) for i, v in list(self.produt.items())[:250]},
@@ -2813,6 +2822,11 @@ class Cognicao:
         # meta-genes da colônia (evoluídos por comparação de janelas de fitness)
         self.meta = {"curiosidade_min": 0.55, "foco": 0.5}
         self._meta_teste = None; self._fit_janela = deque(maxlen=12)
+        # cognição generativa profunda
+        self.hipoteses = []          # hipóteses vivas em teste (pontes tentativas)
+        self.descobertas = 0; self.hip_confirm = 0; self.hip_refut = 0
+        self.insights = 0; self.sonhos = 0
+        self.diario = deque(maxlen=10)   # últimos insights destilados (texto)
 
     # ─────────────── modelo interno do mundo ───────────────
     def observar_apetite(self, apet):
@@ -2976,12 +2990,113 @@ class Cognicao:
             self.meta[chave] = novo
             self._meta_teste = (chave, antigo, media)
 
+    # ─────────────── analogia, descoberta e ciclo de hipóteses ───────────────
+    def _assinatura(self, mic, c):
+        """Assinatura estrutural leve de um conceito: (grau, ordem, origem
+        dominante da vizinhança). Conceitos com assinaturas próximas ocupam
+        papéis ANÁLOGOS em regiões diferentes do micélio."""
+        viz = mic.adj.get(c.id, {})
+        origens = Counter()
+        for j in viz:
+            v = mic.nos.get(j)
+            if v:
+                origens[v.origem] += 1
+        dom = origens.most_common(1)[0][0] if origens else c.origem
+        return (min(len(viz), 6), c.ordem, dom)
+
+    def descobrir(self, mic, eventos=None):
+        """Raciocínio por analogia: acha dois conceitos de assinatura estrutural
+        parecida MAS distantes no grafo (sem aresta e sem vizinho comum) e
+        arrisca uma ponte — a hipótese de que desempenham papel análogo. Se a
+        ponte se sustentar, vira DESCOBERTA (conhecimento novo entre clusters)."""
+        nos = list(mic.nos.values())
+        if len(nos) < 6:
+            return None
+        amostra = self.rng.sample(nos, min(14, len(nos)))
+        assin = {c.id: self._assinatura(mic, c) for c in amostra}
+        alvo = None
+        for i in range(len(amostra)):
+            for j in range(i+1, len(amostra)):
+                a, b = amostra[i], amostra[j]
+                if b.id in mic.adj.get(a.id, {}):
+                    continue
+                if set(mic.adj.get(a.id, {})) & set(mic.adj.get(b.id, {})):
+                    continue                 # já perto — não é salto criativo
+                if assin[a.id] == assin[b.id]:
+                    alvo = (a, b); break
+            if alvo:
+                break
+        if not alvo:
+            return None
+        a, b = alvo
+        mic.conectar(a, b, 0.09)
+        mic.ativar([a.id, b.id], 0.35, (185, 140, 255))
+        self.hipoteses.append({"a": a.id, "b": b.id, "nasc": mic.tick})
+        if eventos:
+            eventos.emitir("analogia", a=a.rotulo, b=b.rotulo)
+        return alvo
+
+    def ciclo_hipoteses(self, mic, eventos=None):
+        """Ciclo de vida da hipótese: a ponte que ENGROSSOU e cujos dois lados
+        co-ativaram é CONFIRMADA (descoberta); a que enfraqueceu é REFUTADA e
+        desfeita. Exploração deixa de ser ruído — vira aprendizado testável."""
+        vivas = []
+        for h in self.hipoteses:
+            a = mic.nos.get(h["a"]); b = mic.nos.get(h["b"])
+            e = mic.adj.get(h["a"], {}).get(h["b"]) if (a and b) else None
+            if not a or not b or e is None:
+                self.hip_refut += 1; continue
+            if mic.tick - h["nasc"] < 5:
+                vivas.append(h); continue
+            integrou = bool(set(mic.adj.get(a.id, {})) & set(mic.adj.get(b.id, {})))
+            if (e[0] > 0.10 and (a.ativ + b.ativ) > 0.20) or integrou:
+                mic.conectar(a, b, 0.16)
+                a.util = clamp(a.util + 0.06, 0, 1); b.util = clamp(b.util + 0.06, 0, 1)
+                self.descobertas += 1; self.hip_confirm += 1
+                self.curiosidade = clamp(self.curiosidade + 0.08, 0, 1)
+                if eventos:
+                    eventos.emitir("descoberta", a=a.rotulo, b=b.rotulo)
+            else:
+                mic.adj.get(h["a"], {}).pop(h["b"], None)
+                mic.adj.get(h["b"], {}).pop(h["a"], None)
+                self.hip_refut += 1
+        self.hipoteses = vivas[-24:]
+
+    def sonhar(self, mic, aforista=None, eventos=None):
+        """Sonho/consolidação: fora do trabalho a colônia RELEMBRA e RECOMBINA —
+        reativa conceitos ao acaso, funde os que ficaram próximos e às vezes
+        destila um insight. Generatividade nascida da memória (à la Physarum)."""
+        self.sonhos += 1
+        nos = list(mic.nos.values())
+        if len(nos) < 4:
+            return None
+        semente = self.rng.sample(nos, min(4, len(nos)))
+        mic.ativar([c.id for c in semente], 0.5, (120, 160, 255))
+        # o sonho TESTA as hipóteses vivas — reativa suas pontas para ver se elas
+        # se sustentam sob recombinação (consolidação de aprendizado)
+        for h in self.hipoteses[-4:]:
+            if h["a"] in mic.nos and h["b"] in mic.nos:
+                mic.ativar([h["a"], h["b"]], 0.3, (185, 140, 255))
+        mic.consolidar(); mic.fundir()
+        insight = None
+        if aforista is not None and self.rng.random() < 0.6:
+            insight = aforista.destilar(mic)
+            if insight:
+                self.insights += 1; self.diario.append(insight["pt"])
+                if eventos:
+                    eventos.emitir("insight", texto=insight["pt"], lingua=insight["lingua"])
+        if eventos:
+            eventos.emitir("sonho", n=len(semente))
+        return insight
+
     def dump(self):
         return {"cur": round(self.curiosidade, 3), "surp": round(self.surpresa, 3),
                 "trans": {k: dict(v) for k, v in self.trans.items()},
                 "causal": {k: v for k, v in self.causal.items()},
                 "fit": round(self.fitness, 4), "melhor": round(self.melhor, 4),
                 "meta": self.meta, "reorg": self.reorganizacoes,
+                "gen": [self.descobertas, self.hip_confirm, self.hip_refut,
+                        self.insights, self.sonhos], "diario": list(self.diario),
                 "hist": list(self.fit_hist)}
 
     def carregar(self, d):
@@ -2993,6 +3108,50 @@ class Cognicao:
         self.fitness = d.get("fit", 0.0); self.melhor = d.get("melhor", 0.0)
         self.meta.update(d.get("meta", {})); self.reorganizacoes = d.get("reorg", 0)
         self.fit_hist = deque(d.get("hist", []), maxlen=240)
+        g = (d.get("gen", []) + [0]*5)[:5]
+        (self.descobertas, self.hip_confirm, self.hip_refut,
+         self.insights, self.sonhos) = g
+        self.diario = deque(d.get("diario", []), maxlen=10)
+
+# ═══════════════════════════ AFORISTA (insights) ═══════════════════════════
+# A colônia não só guarda conhecimento — ela o DESTILA. De uma tríade fortemente
+# ligada do micélio, compõe um aforismo: na língua própria da LUMEN e traduzido.
+# É a generatividade fechando o ciclo memória → ideia → obra.
+
+class Aforista:
+    VERBOS = ["nasce de", "atravessa", "guarda", "ecoa em", "dobra-se sobre",
+              "alimenta", "dissolve", "entrelaça", "ilumina", "responde a",
+              "lembra", "germina em", "sustenta", "contradiz"]
+    LIGA = ["e", "—", "onde", "enquanto", "até que", "porque", "assim como"]
+
+    def __init__(self, lingua, rng):
+        self.lingua = lingua; self.rng = rng; self.contador = 0
+
+    def _triade(self, mic):
+        if len(mic.nos) < 3:
+            return None
+        centro = max(mic.nos.values(), key=lambda c: c.util*0.6 + c.ativ*0.4)
+        viz = sorted(mic.adj.get(centro.id, {}).items(), key=lambda kv: -kv[1][0])
+        outros = [mic.nos[j] for j, _ in viz if j in mic.nos][:2]
+        if len(outros) < 2:
+            extra = [c for c in mic.nos.values() if c.id != centro.id]
+            outros = (outros + self.rng.sample(extra, min(2, len(extra))))[:2]
+        return [centro] + outros if len(outros) >= 2 else None
+
+    def destilar(self, mic):
+        tri = self._triade(mic)
+        if not tri:
+            return None
+        self.contador += 1
+        a, b, c = [n.rotulo for n in tri]
+        v1 = self.rng.choice(self.VERBOS); v2 = self.rng.choice(self.VERBOS)
+        pt = "%s %s %s, %s %s %s %s." % (
+            a.capitalize(), v1, b, self.rng.choice(self.LIGA), c, v2, a)
+        try:
+            lingua = self.lingua.frase([a, b, c], "expressao", self.contador)
+        except Exception:
+            lingua = ""
+        return {"pt": pt, "lingua": lingua, "conceitos": [a, b, c]}
 
 # ═══════════════════════════ EVENTOS ═══════════════════════════
 # Barramento que liga o estado interno à sua manifestação visual. Toda ação
@@ -3298,43 +3457,124 @@ class CanvasBloco:
                 else:
                     escreve(buf, x0+cx, y0+cy, "▄", b, None)
 
-class Teclado:
-    """Leitura não-bloqueante de uma tecla (POSIX). Degrada em silêncio se não
-    houver TTY (modo headless/pipe). Nunca bloqueia o laço vivo."""
+def habilitar_terminal():
+    """Habilita sequências ANSI/VT no Windows 10+ (no-op em POSIX). Sem isso,
+    o desktop Windows mostraria os códigos de cor como lixo."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        k = ctypes.windll.kernel32
+        hdl = k.GetStdHandle(-11)              # STD_OUTPUT_HANDLE
+        mode = ctypes.c_uint32()
+        if k.GetConsoleMode(hdl, ctypes.byref(mode)):
+            k.SetConsoleMode(hdl, mode.value | 0x0004)  # VT PROCESSING
+    except Exception:
+        pass
 
-    def __init__(self):
-        self.ok = False; self._fd = None; self._old = None
-        self._select = None
+# regex de eventos de mouse SGR:  ESC [ < b ; x ; y (M|m)
+_MOUSE_RE = re.compile(r"\x1b\[<(\d+);(\d+);(\d+)([Mm])")
+
+class Teclado:
+    """Entrada não-bloqueante multiplataforma para o desktop: teclado em POSIX
+    (termios) e Windows (msvcrt), além de MOUSE (SGR 1002/1006) no POSIX —
+    roda/arrasta/clica. Degrada em silêncio sem TTY. Nunca bloqueia o laço."""
+
+    def __init__(self, mouse=True):
+        self.ok = False; self.win = (os.name == "nt")
+        self.mouse = mouse and not self.win
+        self._fd = None; self._old = None; self._buf = ""
+        self._arraste = None                   # (x,y) do último ponto de arraste
 
     def __enter__(self):
         try:
+            if self.win:
+                import msvcrt
+                self._msvcrt = msvcrt; self.ok = True
+                return self
             import termios, tty, select as _sel
-            self._sel = _sel
+            self._sel = _sel; self._termios = termios
             self._fd = sys.stdin.fileno()
             if not os.isatty(self._fd):
                 return self
-            self._termios = termios
             self._old = termios.tcgetattr(self._fd)
             tty.setcbreak(self._fd)
+            if self.mouse:
+                sys.stdout.write("\x1b[?1002h\x1b[?1006h"); sys.stdout.flush()
             self.ok = True
         except Exception:
             self.ok = False
         return self
 
-    def ler(self):
+    def eventos(self):
+        """Devolve uma lista de eventos deste quadro: strings (teclas) e tuplas
+        de mouse ('scroll',±1) / ('drag',dx,dy) / ('click',col,lin)."""
         if not self.ok:
-            return None
+            return []
+        if self.win:
+            evs = []
+            try:
+                while self._msvcrt.kbhit():
+                    ch = self._msvcrt.getwch()
+                    if ch in ("\x00", "\xe0"):
+                        self._msvcrt.getwch()          # descarta teclas especiais
+                    else:
+                        evs.append(ch)
+            except Exception:
+                pass
+            return evs
+        # POSIX: lê tudo que estiver disponível e faz o parse
         try:
             r, _, _ = self._sel.select([self._fd], [], [], 0)
             if r:
-                return os.read(self._fd, 1).decode("utf-8", "ignore")
+                self._buf += os.read(self._fd, 4096).decode("utf-8", "ignore")
         except Exception:
+            return []
+        return self._parse()
+
+    def _parse(self):
+        evs = []
+        while self._buf:
+            if self._buf[0] == "\x1b":
+                m = _MOUSE_RE.match(self._buf)
+                if m:
+                    b, x, y, tp = int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4)
+                    self._buf = self._buf[m.end():]
+                    evs.append(self._mouse(b, x, y, tp))
+                    continue
+                # outra sequência de escape (setas etc.): consome até uma letra
+                j = 1
+                while j < len(self._buf) and not self._buf[j].isalpha():
+                    j += 1
+                if j < len(self._buf):
+                    self._buf = self._buf[j+1:]; continue
+                break                                  # sequência incompleta
+            else:
+                evs.append(self._buf[0]); self._buf = self._buf[1:]
+        return [e for e in evs if e is not None]
+
+    def _mouse(self, b, x, y, tp):
+        if b in (64, 65):                              # roda do mouse
+            self._arraste = None
+            return ("scroll", 1 if b == 64 else -1)
+        if tp == "m":                                  # soltou o botão
+            self._arraste = None
             return None
-        return None
+        if b & 32:                                     # arraste (botão + movimento)
+            if self._arraste is not None:
+                dx = x - self._arraste[0]; dy = y - self._arraste[1]
+                self._arraste = (x, y)
+                return ("drag", dx, dy)
+            self._arraste = (x, y)
+            return None
+        self._arraste = (x, y)                          # clique
+        return ("click", x, y)
 
     def __exit__(self, *a):
-        if self.ok and self._old is not None:
+        if self.ok and not self.win and self._old is not None:
             try:
+                if self.mouse:
+                    sys.stdout.write("\x1b[?1002l\x1b[?1006l"); sys.stdout.flush()
                 self._termios.tcsetattr(self._fd, self._termios.TCSADRAIN, self._old)
             except Exception:
                 pass
@@ -3394,12 +3634,17 @@ class Microscopio:
         self.part = []          # partículas dirigidas por eventos
         self.msg = ""
         self.msg_ttl = 0
+        self._cvdim = None      # (W,H,x0,y0) do último canvas de grafo (p/ mouse)
+        self.foco = None        # id do conceito inspecionado pelo clique
 
     # ─────────────── câmera graph→pixel ───────────────
     def _mapa(self, W, H, gx, gy):
         base = min(W, H) / (2.4 * _R_LAYOUT)
         s = base * self.zoom
         return (W/2 + (gx - self.cam[0])*s, H/2 + (gy - self.cam[1])*s)
+
+    def _escala(self, W, H):
+        return (min(W, H) / (2.4 * _R_LAYOUT)) * self.zoom
 
     # ─────────────── entrada do usuário ───────────────
     def tecla(self, k):
@@ -3419,8 +3664,41 @@ class Microscopio:
             return False
         return True
 
+    def entrada(self, ev, o):
+        """Despacha teclado e mouse (desktop). Devolve False para encerrar."""
+        if isinstance(ev, str):
+            return self.tecla(ev)
+        if not isinstance(ev, tuple):
+            return True
+        if ev[0] == "scroll":
+            self.zoom = clamp(self.zoom * (1.18 if ev[1] > 0 else 1/1.18), 0.3, 6.0)
+        elif ev[0] == "drag" and self._cvdim:
+            W, H, x0, y0 = self._cvdim; s = max(1e-6, self._escala(W, H))
+            self.cam[0] -= ev[1] * 2.0 / s      # 2 subpixels Braille por coluna
+            self.cam[1] -= ev[2] * 4.0 / s      # 4 subpixels por linha
+        elif ev[0] == "click" and self._cvdim:
+            self._inspecionar(ev[1], ev[2], o)
+        return True
+
+    def _inspecionar(self, col, lin, o):
+        """Clique inspeciona o conceito mais próximo (modos de grafo)."""
+        if self.modo not in (0, 1, 2) or not self._cvdim:
+            return
+        W, H, x0, y0 = self._cvdim
+        px = (col - 1 - x0) * 2; py = (lin - 1 - y0) * 4
+        best = None; bd = 1e9
+        for c in o.mic.nos.values():
+            cx, cy = self._mapa(W, H, c.x, c.y)
+            d = (cx - px)**2 + (cy - py)**2
+            if d < bd:
+                bd = d; best = c
+        if best and bd < 900:
+            self.foco = best.id
+            grau = len(o.mic.adj.get(best.id, {}))
+            self._flash("«%s» · grau %d · util %.2f" % (best.rotulo, grau, best.util))
+
     def _flash(self, txt):
-        self.msg = txt; self.msg_ttl = 22
+        self.msg = txt; self.msg_ttl = 30
 
     # ─────────────── partículas de evento ───────────────
     def semear_eventos(self, eventos):
@@ -3437,6 +3715,14 @@ class Microscopio:
                 cor = (255, 170, 120); n = 12
             elif t == "forrageio":
                 cor = (120, 210, 255); n = 14
+            elif t == "analogia":
+                cor = (185, 140, 255); n = 12
+            elif t == "descoberta":
+                cor = (255, 120, 235); n = 34
+            elif t == "insight":
+                cor = (255, 235, 150); n = 24
+            elif t == "sonho":
+                cor = (120, 160, 255); n = 16
             elif t == "nivel":
                 cor = (255, 255, 180); n = 30
             else:
@@ -3472,6 +3758,13 @@ class Microscopio:
         self._cabecalho(o, buf, cols)
         região = (0, topo, cols, cH)
         modo = MODOS[self.modo]
+        # dimensões do canvas de grafo (p/ o mouse mapear clique/arraste)
+        if self.modo in (0, 2):        # Braille
+            self._cvdim = (cols*2, cH*4, 0, topo)
+        elif self.modo == 1:           # meio-bloco
+            self._cvdim = (cols, cH*2, 0, topo)
+        else:
+            self._cvdim = None
         try:
             getattr(self, "_v_" + modo)(o, buf, região)
         except Exception as e:      # visual nunca derruba o organismo
@@ -3496,9 +3789,9 @@ class Microscopio:
                     (150, 230, 255) if sel else None)
             x += len(rot) + 2
         met = o.mic.metricas()
-        info = "nós %d · hifas %d · pop %d · fit %.2f · cur %.2f" % (
+        info = "nós %d · hifas %d · pop %d · fit %.2f · ✷%d ✦%d · cur %.2f" % (
             met["nos"], met["arestas"], len(o.mundo.bichos),
-            o.cog.fitness, o.cog.curiosidade)
+            o.cog.fitness, o.cog.descobertas, o.cog.insights, o.cog.curiosidade)
         escreve(buf, max(1, cols-len(info)-1), 0, info, (150, 160, 180))
 
     # ─────────────── modo 1: MICÉLIO ───────────────
@@ -3536,6 +3829,19 @@ class Microscopio:
             cv.disco(px, py, r, cor_conceito(c), 0.6 + 0.4*c.ativ)
             if c.ativ > 0.6:
                 cv.disco(px, py, 1, (255, 255, 255), c.ativ)
+        # conceito inspecionado pelo clique: anel pulsante + vizinhança realçada
+        foc = mic.nos.get(self.foco) if self.foco else None
+        if foc:
+            fx, fy = self._mapa(cv.W, cv.H, foc.x, foc.y)
+            rr = 4 + int(2*abs(math.sin(self.frame*0.2)))
+            for a in range(0, 360, 20):
+                ang = math.radians(a)
+                cv.plot(fx+math.cos(ang)*rr*2, fy+math.sin(ang)*rr, (255, 255, 255), 0.9)
+            for j in mic.adj.get(foc.id, {}):
+                v = mic.nos.get(j)
+                if v:
+                    vx, vy = self._mapa(cv.W, cv.H, v.x, v.y)
+                    cv.linha(fx, fy, vx, vy, (255, 240, 180), 1.0)
         # hifas (subagentes) orbitando por papel
         self._orbita_hifas(o, cv)
         self._passo_part(cv)
@@ -3721,9 +4027,11 @@ class Microscopio:
         for si, (nome, serie, cor) in enumerate(series):
             val = serie[-1] if serie else 0.0
             escreve(buf, x0+1, y0 + int(faixa*si/4) + 1, "%s %.2f" % (nome, val), cor)
-        escreve(buf, x0+1, y0, " %s · reorganizações: %d · estilo ger %d " % (
-            MODO_NOME["timeline"], o.cog.reorganizacoes, o.mente.estilo.geracoes),
-            (220, 220, 240))
+        escreve(buf, x0+1, y0, " %s · reorg %d · descobertas %d · insights %d · linhagens %d " % (
+            MODO_NOME["timeline"], o.cog.reorganizacoes, o.cog.descobertas,
+            o.cog.insights, o.col.especies(o.mundo)), (220, 220, 240))
+        if o.cog.diario:
+            escreve(buf, x0+1, y0+h-1, ("✦ " + o.cog.diario[-1])[:cv.cols], (255, 235, 150))
 
     # ─────────────── HUD (rodapé, todos os modos) ───────────────
     def _rodape(self, o, buf, cols, rows):
@@ -3767,6 +4075,14 @@ def _descr_evento(e):
         return "duas hifas %s se fundem" % d.get("papel", "")
     if t == "forrageio":
         return "forrageio: o mundo pinga «%s»" % d.get("o", "?")
+    if t == "analogia":
+        return "analogia: «%s» seria como «%s»?" % (d.get("a", "?"), d.get("b", "?"))
+    if t == "descoberta":
+        return "✷ DESCOBERTA: «%s» ↔ «%s» — a ponte se sustentou" % (d.get("a", "?"), d.get("b", "?"))
+    if t == "insight":
+        return "✦ insight: %s" % (d.get("texto", "") or "")[:60]
+    if t == "sonho":
+        return "sonho: recombina %d conceitos na memória" % d.get("n", 0)
     if t == "nivel":
         return "maestria cresce → Nv%d" % d.get("nivel", 0)
     return t
@@ -3797,7 +4113,9 @@ class Organismo:
         self.col = Colonia(self.mic, self.dig, rng)
         self.cog = Cognicao(rng); self.ev = BarramentoEventos()
         self.sup = Supervisor(sandbox)
+        self.afor = Aforista(lingua, rng)
         self.micro = Microscopio(rng, leve=leve)
+        self.sandbox = sandbox
         self.tick = 0
         mente.organismo = self
         raw = getattr(mente, "_organismo_raw", None)
@@ -3881,6 +4199,23 @@ class Organismo:
             self.ev.emitir("nivel", nivel=self.mente.nivel)
         return art, satisf
 
+    def _salvar_insight(self, ins):
+        """Grava o aforismo destilado no diário de insights — bilíngue, dentro
+        do sandbox (checado pelo Supervisor). Conhecimento virando obra."""
+        try:
+            os.makedirs(self.sandbox, exist_ok=True)
+        except OSError:
+            return
+        caminho = os.path.join(self.sandbox, "lumen_insights.txt")
+        if not self.sup.caminho_seguro(caminho):
+            return
+        try:
+            with open(caminho, "a", encoding="utf-8") as f:
+                f.write("[%s] %s\n    %s  «%s»\n" % (
+                    now_str(), ins["pt"], ins["lingua"], " · ".join(ins["conceitos"])))
+        except OSError:
+            pass
+
     # ─────────────── um tick vivo completo ───────────────
     def passo(self, args, t0):
         self.tick += 1
@@ -3914,6 +4249,18 @@ class Organismo:
         if self.tick % 6 == 0:
             self.cog.planejar(self.mic.metricas())
 
+        # ── cognição generativa profunda ──
+        # analogia → hipótese (ponte tentativa) e o ciclo que a confirma/refuta
+        if self.tick % 5 == 0:
+            self.cog.descobrir(self.mic, self.ev)
+        if self.tick % 3 == 0:
+            self.cog.ciclo_hipoteses(self.mic, self.ev)
+        # sonho/consolidação: recombina memória e às vezes destila um insight
+        if self.tick % 16 == 0:
+            ins = self.cog.sonhar(self.mic, self.afor, self.ev)
+            if ins:
+                self._salvar_insight(ins)
+
         # criação (base preservada) numa cadência ligada à maestria
         cadencia = max(5, 12 - m.nivel)
         if self.tick % cadencia == 0 and not self.micro.pausado:
@@ -3936,13 +4283,13 @@ def viver_colonia(o, args, caminho):
     """Laço vivo do organismo-colmeia com o microscópio em tempo real.
     Gera a cada tick (para o main contar/salvar)."""
     o.ev.emitir("genese")
-    with Teclado() as teclado:
+    with Teclado(mouse=not args.sem_mouse) as teclado:
         while True:
             t0 = time.time()
             if not args.headless:
-                seguir = o.micro.tecla(teclado.ler())
-                if not seguir:
-                    return
+                for entrada in teclado.eventos():
+                    if not o.micro.entrada(entrada, o):
+                        return
             if not o.micro.pausado:
                 o.passo(args, t0)
             if not args.headless:
@@ -3991,6 +4338,8 @@ def main():
                     help="pasta 'inbox' de .txt consumidos aos poucos como alimento")
     ap.add_argument("--modo", type=str, default="micelio", choices=MODOS,
                     help="modo inicial do microscópio")
+    ap.add_argument("--sem-mouse", action="store_true",
+                    help="desliga o mouse (roda=zoom, arraste=pan, clique=inspecionar)")
     args = ap.parse_args()
 
     base = os.path.dirname(os.path.abspath(__file__))
@@ -4036,6 +4385,7 @@ def main():
                 sys.stdout.write(msg + "\n")
 
     if not args.headless:
+        habilitar_terminal()           # ANSI/VT no Windows; no-op em POSIX
         sys.stdout.write(HIDE + CLEAR)
     try:
         mente._acordou = restaurado
@@ -4066,11 +4416,13 @@ def main():
             sys.stdout.write(
                 "%s\n%s◉ LUMEN-colmeia adormece. Nv%d «%s» · micélio: %d conceitos / %d hifas · "
                 "fitness %.2f · coerência %.2f · %d fusões de ideias · %d esquecidos · "
+                "%d descobertas · %d insights destilados · %d sonhos · %d linhagens · "
                 "%d hifas vivas · reorganizações %d · guardião %s.\n"
                 "Conhecimento digerido: %d aceitos / %d rejeitados. Artefatos em: %s\n"
                 "Rode de novo e a colônia acorda onde parou.%s\n" % (
                     ok, C_STAT, mente.nivel, mente.nome_nivel(), met["nos"], met["arestas"],
                     org.cog.fitness, met["coerencia"], org.mic.fundidos, org.mic.esquecidos,
+                    org.cog.descobertas, org.cog.insights, org.cog.sonhos, org.col.especies(org.mundo),
                     vivos, org.cog.reorganizacoes, org.sup.relatorio()["integridade"],
                     org.dig.aceitos, org.dig.rejeitados, sandbox, RESET))
         else:
